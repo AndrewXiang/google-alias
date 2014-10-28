@@ -7,9 +7,10 @@
  * @date 14-10-27
  */
 class search{
-    private $cookie = array();
+    private $cookie = '';
     private $content = '';
     private $paras = array();
+    private $headerlen = 0;
 
     public $paras_m = array();
     public $status = array();
@@ -22,6 +23,8 @@ class search{
      * @param string $keywork
      */
     function __construct($keywork){
+        if(!isset($_SESSION))
+            session_start();
         $this->paras['q'] = $keywork;
         $this->paras_m[opt('GET_Q')] = $keywork;
         $this->paras['num'] = opt('NUM');
@@ -46,6 +49,9 @@ class search{
             return FALSE;
         if(HAVE_GZIP && opt('ENABLE_GZIP'))
             $this->content = zlib_decode($this->content);
+        $info = curl_getinfo($ch);
+        $this->headerlen = $info['header_size'];
+        $this->pars_header();
         $this->remove_css_and_js();
         preg_match('`<div id="resultStats"[^>]*>[^\d]*([\d,]*)[^<]*<nobr>[^\d]*([\d\.]*)[^<]*</nobr></div>`m', $this->content, $r);
         if(!isset($r[1]) || !isset($r[2])){
@@ -59,6 +65,14 @@ class search{
         return $this;
     }
 
+    public function pars_header(){
+        if($this->headerlen <= 0)
+             return FALSE;
+        $headers = substr($this->content, 0, $this->headerlen);
+        $reg = '@set-cookie:(.*)@i';
+        preg_match_all($reg, $headers, $r, PREG_SET_ORDER);
+        var_dump($r);
+    }
     /**
      * remove the style and javascript tag from content.
      * @return $this
@@ -271,5 +285,8 @@ class search{
     //debug
     public function debug_url(){
         return search::url.$this->arr2url($this->paras);
+    }
+    public function get_content(){
+        return $this->content;
     }
 };
