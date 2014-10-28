@@ -7,10 +7,9 @@
  * @date 14-10-27
  */
 class search{
-    private $cookie = '';
     private $content = '';
     private $paras = array();
-    private $headerlen = 0;
+    private $headers = array();
 
     public $paras_m = array();
     public $status = array();
@@ -23,11 +22,14 @@ class search{
      * @param string $keywork
      */
     function __construct($keywork){
-        if(!isset($_SESSION))
-            session_start();
+        global $headers;
+        $this->headers =$headers;
+        if(!isset($_SESSION['cookie']))
+            $_SESSION['cookie'] = array();
         $this->paras['q'] = $keywork;
         $this->paras_m[opt('GET_Q')] = $keywork;
-        $this->paras['num'] = opt('NUM');
+        if(!isset($this->paras['num']))
+            $this->paras['num'] = opt('NUM');
         if(opt('SAFE_SEARCH'))
             $this->paras['safe'] = 'strict';
         $this->paras['start'] = 0;
@@ -39,10 +41,15 @@ class search{
      * @return $this
      */
     public function load(){
-        global $headers;
         $paras = $this->arr2url($this->paras);
         $ch = curl_init(search::url.$paras);
-        curl_setopt_array($ch, $headers);
+        $s = '';
+        foreach($_SESSION['cookie'] as $v){
+            $s .= ' '.$v;
+        }
+        $this->headers[CURLOPT_HTTPHEADER][] = 'cookie:'.$s;
+        echo $s;
+        curl_setopt_array($ch, $this->headers);
         $this->content = curl_exec($ch);
         $this->status['errno'] = curl_errno($ch);
         if($this->status['errno'])
@@ -50,8 +57,12 @@ class search{
         if(HAVE_GZIP && opt('ENABLE_GZIP'))
             $this->content = zlib_decode($this->content);
         $info = curl_getinfo($ch);
-        $this->headerlen = $info['header_size'];
-        $this->pars_header();
+        preg_match_all('@set-cookie: ([^ ]*)@i', substr($this->content, 0, $info['header_size']), $r, PREG_SET_ORDER);
+        if(count($r) > 0){
+            foreach($r as $v){
+                $_SESSION['cookie'][$v[1][0]] = $v[1];
+            }
+        }
         $this->remove_css_and_js();
         preg_match('`<div id="resultStats"[^>]*>[^\d]*([\d,]*)[^<]*<nobr>[^\d]*([\d\.]*)[^<]*</nobr></div>`m', $this->content, $r);
         if(!isset($r[1]) || !isset($r[2])){
@@ -65,14 +76,6 @@ class search{
         return $this;
     }
 
-    public function pars_header(){
-        if($this->headerlen <= 0)
-             return FALSE;
-        $headers = substr($this->content, 0, $this->headerlen);
-        $reg = '@set-cookie:(.*)@i';
-        preg_match_all($reg, $headers, $r, PREG_SET_ORDER);
-        var_dump($r);
-    }
     /**
      * remove the style and javascript tag from content.
      * @return $this
